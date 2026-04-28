@@ -21,11 +21,23 @@ with col_headless:
 with col_steps:
     max_steps = st.number_input("最大步骤数", min_value=3, max_value=30, value=12)
 
+planner_mode = st.selectbox(
+    "Planner",
+    options=["hybrid", "rule", "llm"],
+    index=0,
+    help="hybrid 会让本地稳定任务走规则，非 MVP 任务在配置 OPENAI_API_KEY 后走大模型。",
+)
+
 if col_run.button("运行任务", type="primary", use_container_width=True):
     with st.spinner("Agent 正在执行浏览器任务..."):
         resp = requests.post(
             f"{API_BASE}/api/tasks/run",
-            json={"task": task, "headless": headless, "max_steps": int(max_steps)},
+            json={
+                "task": task,
+                "headless": headless,
+                "max_steps": int(max_steps),
+                "planner_mode": planner_mode,
+            },
             timeout=240,
         )
     if resp.ok:
@@ -36,7 +48,10 @@ if col_run.button("运行任务", type="primary", use_container_width=True):
             st.error(data["error_message"])
         else:
             st.success(data.get("final_result") or "任务完成")
-        st.caption(f"Task ID: {data['task_id']} | Status: {data['status']} | Elapsed: {data['elapsed_ms']} ms")
+        st.caption(
+            f"Task ID: {data['task_id']} | Status: {data['status']} | "
+            f"Planner: {data.get('planner_mode')} | Elapsed: {data['elapsed_ms']} ms"
+        )
     else:
         st.error(resp.text)
 

@@ -89,3 +89,31 @@ python -m app.eval.runner --api-base http://localhost:8000
 docker build -t webtask-agent .
 docker run --rm -p 8000:8000 webtask-agent
 ```
+
+## Planner 模式
+
+项目现在支持三种 Planner：
+
+```text
+rule   ：只使用规则 Planner，最稳定，适合本地演示和评测。
+llm    ：只使用大模型 Planner，需要配置 OPENAI_API_KEY。
+hybrid ：默认模式。MVP 稳定任务走规则；未知任务在有 OPENAI_API_KEY 时走大模型。
+```
+
+通过环境变量切换：
+
+```bash
+set WEBTASK_PLANNER=hybrid
+set OPENAI_API_KEY=你的 OpenAI Key
+set OPENAI_MODEL=gpt-4o-mini
+```
+
+也可以在 API 请求里临时指定：
+
+```bash
+curl -X POST http://localhost:8000/api/tasks/run ^
+  -H "Content-Type: application/json" ^
+  -d "{\"task\":\"打开本地搜索页面，搜索 Spring AI 工具调用，提取前三条结果标题和链接\",\"planner_mode\":\"hybrid\"}"
+```
+
+LLM Planner 的输出会经过 `AgentAction` Pydantic schema 校验，只允许白名单工具，并检查必要参数。模型输出 JSON 解析失败、工具名非法或参数缺失时，会自动要求模型重新输出合法动作，最多重试 3 次。

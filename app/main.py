@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
@@ -23,6 +23,7 @@ class TaskRequest(BaseModel):
     task: str = Field(..., min_length=2)
     headless: bool | None = None
     max_steps: int = Field(default=12, ge=3, le=30)
+    planner_mode: Literal["rule", "llm", "hybrid"] | None = None
 
 
 @app.on_event("startup")
@@ -74,7 +75,7 @@ async def health() -> dict[str, str]:
 
 @app.post("/api/tasks/run")
 async def run_task(req: TaskRequest) -> dict[str, Any]:
-    runner = AgentRunner(headless=req.headless, max_steps=req.max_steps)
+    runner = AgentRunner(headless=req.headless, max_steps=req.max_steps, planner_mode=req.planner_mode)
     result = await runner.run(req.task)
     result["trace"] = [_with_screenshot_url(dict(row)) for row in result.get("trace", [])]
     return result

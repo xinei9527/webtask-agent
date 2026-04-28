@@ -6,11 +6,13 @@ import re
 from pathlib import Path
 from typing import Any
 
+from app.agent.actions import PlannerMode, make_action, validate_action
 from app.agent.prompts import SYSTEM_PROMPT
 
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 PAGES_DIR = ROOT_DIR / "static" / "pages"
+LLM_PARSE_RETRIES = 3
 
 
 def _page_uri(name: str) -> str:
@@ -79,6 +81,25 @@ def _has_action(state: dict[str, Any], tool: str, key: str, value: str) -> bool:
     return False
 
 
+def _is_known_mvp_task(task: str) -> bool:
+    return any(
+        keyword in task
+        for keyword in (
+            "搜索",
+            "检索",
+            "百度",
+            "表单",
+            "填写",
+            "手机号",
+            "提交",
+            "商品",
+            "价格最低",
+            "产品",
+            "最便宜",
+        )
+    )
+
+
 def _format_links(output: Any, limit: int = 3) -> str:
     if isinstance(output, str):
         try:
@@ -134,7 +155,7 @@ class RulePlanner:
         task = state["user_task"]
         if any(keyword in task for keyword in ("表单", "填写", "手机号", "提交")):
             return self._form_action(state)
-        if any(keyword in task for keyword in ("商品", "价格最低", "产品")):
+        if any(keyword in task for keyword in ("商品", "价格最低", "产品", "最便宜")):
             return self._product_action(state)
         if any(keyword in task for keyword in ("搜索", "检索", "百度")):
             return self._search_action(state)
@@ -149,34 +170,14 @@ class RulePlanner:
         link_selector = "#results a" if use_local else "h3 a, .result a"
 
         if not _has_tool(state, "open_url"):
-            return {
-                "tool": "open_url",
-                "args": {"url": url},
-                "reason": "打开搜索入口页面",
-            }
+            return make_action("open_url", {"url": url}, "打开搜索入口页面")
         if not _has_tool(state, "type_by_selector"):
-            return {
-                "tool": "type_by_selector",
-                "args": {"selector": selector, "value": query},
-                "reason": "输入搜索关键词",
-            }
+            return make_action("type_by_selector", {"selector": selector, "value": query}, "输入搜索关键词")
         if not _has_tool(state, "press"):
-            return {
-                "tool": "press",
-                "args": {"key": "Enter"},
-                "reason": "提交搜索",
-            }
+            return make_action("press", {"key": "Enter"}, "提交搜索")
         if not _has_tool(state, "extract_links"):
-            return {
-                "tool": "extract_links",
-                "args": {"selector": link_selector, "limit": 10},
-                "reason": "提取搜索结果标题和链接",
-            }
-        return {
-            "tool": "finish",
-            "args": {"answer": _format_links(_last_output(state), limit=3)},
-            "reason": "已经提取到搜索结果",
-        }
+            return make_action("extract_links", {"selector": link_selector, "limit": 10}, "提取搜索结果标题和链接")
+        return make_action("finish", {"answer": _format_links(_last_output(state), limit=3)}, "已经提取到搜索结果")
 
     def _form_action(self, state: dict[str, Any]) -> dict[str, Any]:
         task = state["user_task"]
@@ -185,95 +186,52 @@ class RulePlanner:
         phone = _extract_phone(task)
 
         if not _has_tool(state, "open_url"):
-            return {
-                "tool": "open_url",
-                "args": {"url": url},
-                "reason": "打开本地表单页面",
-            }
+            return make_action("open_url", {"url": url}, "打开本地表单页面")
         if not _has_action(state, "type_by_label", "label", "姓名"):
-            return {
-                "tool": "type_by_label",
-                "args": {"label": "姓名", "value": name},
-                "reason": "填写姓名字段",
-            }
+            return make_action("type_by_label", {"label": "姓名", "value": name}, "填写姓名字段")
         if not _has_action(state, "type_by_label", "label", "手机号"):
-            return {
-                "tool": "type_by_label",
-                "args": {"label": "手机号", "value": phone},
-                "reason": "填写手机号字段",
-            }
+            return make_action("type_by_label", {"label": "手机号", "value": phone}, "填写手机号字段")
         if not _has_tool(state, "click_by_text"):
-            return {
-                "tool": "click_by_text",
-                "args": {"text": "提交"},
-                "reason": "提交表单",
-            }
+            return make_action("click_by_text", {"text": "提交"}, "提交表单")
         if not _has_tool(state, "extract_text"):
-            return {
-                "tool": "extract_text",
-                "args": {"selector": "#result"},
-                "reason": "读取提交结果",
-            }
-        return {
-            "tool": "finish",
-            "args": {"answer": str(_last_output(state) or "表单流程已完成。")},
-            "reason": "表单结果已经获取",
-        }
+            return make_action("extract_text", {"selector": "#result"}, "读取提交结果")
+        return make_action("finish", {"answer": str(_last_output(state) or "表单流程已完成。")}, "表单结果已经获取")
 
     def _product_action(self, state: dict[str, Any]) -> dict[str, Any]:
         task = state["user_task"]
         url = _extract_url(task) or _page_uri("products.html")
 
         if not _has_tool(state, "open_url"):
-            return {
-                "tool": "open_url",
-                "args": {"url": url},
-                "reason": "打开商品列表页面",
-            }
+            return make_action("open_url", {"url": url}, "打开商品列表页面")
         if not _has_tool(state, "extract_text"):
-            return {
-                "tool": "extract_text",
-                "args": {"selector": "#products"},
-                "reason": "提取商品列表文本",
-            }
-        return {
-            "tool": "finish",
-            "args": {"answer": _lowest_product_from_text(str(_last_output(state) or ""))},
-            "reason": "已经根据价格计算出最低价商品",
-        }
+            return make_action("extract_text", {"selector": "#products"}, "提取商品列表文本")
+        return make_action(
+            "finish",
+            {"answer": _lowest_product_from_text(str(_last_output(state) or ""))},
+            "已经根据价格计算出最低价商品",
+        )
 
     def _generic_action(self, state: dict[str, Any]) -> dict[str, Any]:
         task = state["user_task"]
         url = _extract_url(task)
         if url and not _has_tool(state, "open_url"):
-            return {
-                "tool": "open_url",
-                "args": {"url": url},
-                "reason": "打开任务中指定的网址",
-            }
+            return make_action("open_url", {"url": url}, "打开任务中指定的网址")
         if url and not _has_tool(state, "extract_text"):
-            return {
-                "tool": "extract_text",
-                "args": {"selector": "body"},
-                "reason": "提取页面正文",
-            }
+            return make_action("extract_text", {"selector": "body"}, "提取页面正文")
         if _has_tool(state, "extract_text"):
-            return {
-                "tool": "finish",
-                "args": {"answer": str(_last_output(state) or "")[:1200]},
-                "reason": "页面文本已经提取",
-            }
-        return {
-            "tool": "finish",
-            "args": {
-                "answer": "当前 MVP 支持网页检索、表单填写和商品/信息抽取任务。请尝试描述这三类任务。"
-            },
-            "reason": "任务类型不在当前 MVP 支持范围内",
-        }
+            return make_action("finish", {"answer": str(_last_output(state) or "")[:1200]}, "页面文本已经提取")
+        return make_action(
+            "finish",
+            {"answer": "当前 MVP 支持网页检索、表单填写和商品/信息抽取任务。请尝试描述这三类任务。"},
+            "任务类型不在当前 MVP 支持范围内",
+        )
 
 
 class LLMPlanner:
     def __init__(self) -> None:
+        if not os.getenv("OPENAI_API_KEY"):
+            raise RuntimeError("LLM planner requires OPENAI_API_KEY.")
+
         from langchain_openai import ChatOpenAI
 
         self.model = ChatOpenAI(
@@ -288,44 +246,80 @@ class LLMPlanner:
             "history": state.get("history", [])[-6:],
             "last_error": state.get("error"),
         }
-        response = await self.model.ainvoke(
-            [
-                ("system", SYSTEM_PROMPT),
-                ("user", json.dumps(payload, ensure_ascii=False, default=str)),
-            ]
-        )
-        return parse_action_json(response.content)
+
+        validation_error = ""
+        for attempt in range(LLM_PARSE_RETRIES):
+            response = await self.model.ainvoke(
+                [
+                    ("system", SYSTEM_PROMPT),
+                    (
+                        "user",
+                        json.dumps(
+                            {
+                                "task_context": payload,
+                                "retry_instruction": validation_error,
+                                "attempt": attempt + 1,
+                            },
+                            ensure_ascii=False,
+                            default=str,
+                        ),
+                    ),
+                ]
+            )
+            raw = str(response.content)
+            try:
+                return parse_action_json(raw)
+            except Exception as exc:
+                validation_error = (
+                    "上一次输出无法被执行。请只返回一个合法 JSON 对象，"
+                    f"错误原因：{exc}。原始输出：{raw[:800]}"
+                )
+
+        raise ValueError(f"LLM planner failed to produce a valid action after {LLM_PARSE_RETRIES} attempts.")
 
 
-def parse_action_json(raw: str) -> dict[str, Any]:
+def _extract_json_object(raw: str) -> str:
     text = raw.strip()
     if text.startswith("```"):
         text = re.sub(r"^```(?:json)?", "", text).strip()
         text = re.sub(r"```$", "", text).strip()
-    action = json.loads(text)
-    if not isinstance(action, dict) or "tool" not in action:
-        raise ValueError("Planner output must be a JSON object with a tool field.")
-    action.setdefault("args", {})
-    action.setdefault("reason", "")
-    return action
+    if text.startswith("{") and text.endswith("}"):
+        return text
+
+    start = text.find("{")
+    end = text.rfind("}")
+    if start >= 0 and end > start:
+        return text[start : end + 1]
+    raise ValueError("Planner output does not contain a JSON object.")
+
+
+def parse_action_json(raw: str) -> dict[str, Any]:
+    action = json.loads(_extract_json_object(raw))
+    if not isinstance(action, dict):
+        raise ValueError("Planner output must be a JSON object.")
+    return validate_action(action)
 
 
 class HybridPlanner:
-    def __init__(self) -> None:
+    def __init__(self, mode: PlannerMode = "hybrid") -> None:
+        self.mode = mode
         self.rule_planner = RulePlanner()
-        self.llm_planner = None
-        if os.getenv("OPENAI_API_KEY"):
-            try:
-                self.llm_planner = LLMPlanner()
-            except Exception:
-                self.llm_planner = None
+        self.llm_planner: LLMPlanner | None = None
+
+        if mode in {"llm", "hybrid"} and os.getenv("OPENAI_API_KEY"):
+            self.llm_planner = LLMPlanner()
+        elif mode == "llm":
+            raise RuntimeError("planner_mode='llm' requires OPENAI_API_KEY.")
 
     async def next_action(self, state: dict[str, Any]) -> dict[str, Any]:
         task = state["user_task"]
-        known_task = any(
-            keyword in task
-            for keyword in ("搜索", "检索", "百度", "表单", "填写", "手机号", "提交", "商品", "价格最低", "产品")
-        )
-        if known_task or self.llm_planner is None:
+
+        if self.mode == "rule":
+            return self.rule_planner.next_action(state)
+        if self.mode == "llm":
+            if self.llm_planner is None:
+                raise RuntimeError("LLM planner is not available.")
+            return await self.llm_planner.next_action(state)
+        if _is_known_mvp_task(task) or self.llm_planner is None:
             return self.rule_planner.next_action(state)
         return await self.llm_planner.next_action(state)

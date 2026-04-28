@@ -7,6 +7,7 @@ from typing import Any, Optional, TypedDict
 from langgraph.graph import END, StateGraph
 
 from app.agent.executor import ToolExecutor, run_action_with_retry
+from app.agent.actions import PlannerMode
 from app.agent.planner import HybridPlanner
 from app.agent.verifier import verify_state
 from app.browser.observer import observe_page
@@ -30,11 +31,19 @@ class AgentState(TypedDict, total=False):
     failure_count: int
     history: list[dict[str, Any]]
     started_at: float
+    planner_mode: str
 
 
 def _env_headless() -> bool:
     value = os.getenv("WEBTASK_HEADLESS", "true").lower()
     return value not in {"0", "false", "no"}
+
+
+def _env_planner_mode() -> PlannerMode:
+    value = os.getenv("WEBTASK_PLANNER", "hybrid").lower()
+    if value not in {"rule", "llm", "hybrid"}:
+        raise ValueError("WEBTASK_PLANNER must be one of: rule, llm, hybrid.")
+    return value  # type: ignore[return-value]
 
 
 def build_agent_graph(
@@ -154,9 +163,15 @@ def build_agent_graph(
 
 
 class AgentRunner:
-    def __init__(self, headless: bool | None = None, max_steps: int = 12):
+    def __init__(
+        self,
+        headless: bool | None = None,
+        max_steps: int = 12,
+        planner_mode: PlannerMode | None = None,
+    ):
         self.headless = _env_headless() if headless is None else headless
         self.max_steps = max_steps
+        self.planner_mode = planner_mode or _env_planner_mode()
 
     async def run(self, user_task: str) -> dict[str, Any]:
         task_id = create_task_run(user_task)
@@ -167,7 +182,7 @@ class AgentRunner:
             page = await session.start(headless=self.headless)
             tools = BrowserTools(page)
             trace = TraceRecorder()
-            planner = HybridPlanner()
+            planner = HybridPlanner(mode=self.planner_mode)
             graph = build_agent_graph(page, tools, trace, planner)
 
             final_state = await graph.ainvoke(
@@ -185,6 +200,7 @@ class AgentRunner:
                     "failure_count": 0,
                     "history": [],
                     "started_at": started_at,
+                    "planner_mode": self.planner_mode,
                 },
                 config={"recursion_limit": self.max_steps * 5},
             )
@@ -206,6 +222,7 @@ class AgentRunner:
                 "error_message": error,
                 "steps": final_state.get("current_step", 0),
                 "elapsed_ms": int((time.time() - started_at) * 1000),
+                "planner_mode": self.planner_mode,
                 "trace": list_trace(task_id),
             }
 
@@ -218,6 +235,7 @@ class AgentRunner:
                 "error_message": str(exc),
                 "steps": 0,
                 "elapsed_ms": int((time.time() - started_at) * 1000),
+                "planner_mode": self.planner_mode,
                 "trace": list_trace(task_id),
             }
         finally:
