@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from app.agent.actions import PlannerMode, make_action, validate_action
+from app.config import get_llm_config
 from app.agent.prompts import SYSTEM_PROMPT
 
 
@@ -52,12 +53,12 @@ def _extract_search_query(task: str) -> str:
 
 def _extract_name(task: str) -> str:
     match = re.search(r"姓名\s*([\u4e00-\u9fa5A-Za-z]{2,20})", task)
-    return match.group(1) if match else "李威"
+    return match.group(1) if match else "测试用户"
 
 
 def _extract_phone(task: str) -> str:
     match = re.search(r"(1[3-9]\d{9})", task)
-    return match.group(1) if match else "18254130015"
+    return match.group(1) if match else "13000000000"
 
 
 def _history(state: dict[str, Any]) -> list[dict[str, Any]]:
@@ -229,14 +230,20 @@ class RulePlanner:
 
 class LLMPlanner:
     def __init__(self) -> None:
-        if not os.getenv("OPENAI_API_KEY"):
+        config = get_llm_config()
+        if not config.configured:
             raise RuntimeError("LLM planner requires OPENAI_API_KEY.")
 
         from langchain_openai import ChatOpenAI
 
+        self.config = config
         self.model = ChatOpenAI(
-            model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
-            temperature=0,
+            model=config.model,
+            temperature=config.temperature,
+            api_key=config.api_key,
+            base_url=config.base_url,
+            timeout=config.timeout,
+            max_retries=config.max_retries,
         )
 
     async def next_action(self, state: dict[str, Any]) -> dict[str, Any]:
@@ -306,7 +313,7 @@ class HybridPlanner:
         self.rule_planner = RulePlanner()
         self.llm_planner: LLMPlanner | None = None
 
-        if mode in {"llm", "hybrid"} and os.getenv("OPENAI_API_KEY"):
+        if mode in {"llm", "hybrid"} and get_llm_config().configured:
             self.llm_planner = LLMPlanner()
         elif mode == "llm":
             raise RuntimeError("planner_mode='llm' requires OPENAI_API_KEY.")

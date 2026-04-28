@@ -12,6 +12,24 @@ API_BASE = os.getenv("WEBTASK_API_BASE", "http://localhost:8000")
 st.set_page_config(page_title="WebTask Agent", layout="wide")
 st.title("WebTask Agent")
 
+try:
+    config_resp = requests.get(f"{API_BASE}/api/config", timeout=10)
+    runtime_config = config_resp.json() if config_resp.ok else {}
+except Exception:
+    runtime_config = {}
+
+with st.sidebar:
+    st.header("Runtime")
+    st.caption(API_BASE)
+    llm_config = runtime_config.get("llm", {})
+    if llm_config.get("configured"):
+        st.success("LLM connected")
+    else:
+        st.warning("LLM not configured")
+    st.write("Model:", llm_config.get("model", "-"))
+    st.write("Base URL:", "configured" if llm_config.get("base_url_configured") else "default")
+    st.write("Default planner:", runtime_config.get("planner_default", "hybrid"))
+
 default_task = "打开本地搜索页面，搜索 Spring AI 工具调用，提取前三条结果标题和链接"
 task = st.text_area("输入浏览器任务", default_task, height=110)
 

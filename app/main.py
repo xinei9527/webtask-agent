@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from app.agent.graph import AgentRunner, get_task_result
+from app.config import get_runtime_config
 from app.db.database import init_db, list_task_runs, list_trace
 from app.trace.analyzer import build_task_report
 
@@ -72,6 +73,11 @@ async def root() -> dict[str, Any]:
 @app.get("/api/health")
 async def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/api/config")
+async def get_config() -> dict[str, Any]:
+    return get_runtime_config()
 
 
 @app.post("/api/tasks/run")

@@ -88,6 +88,43 @@ set OPENAI_MODEL=gpt-4o-mini
 
 LLM Planner 的输出会经过 `AgentAction` Pydantic schema 校验，只允许白名单工具，并检查必要参数。模型输出 JSON 解析失败、工具名非法或参数缺失时，会自动要求模型重新输出合法动作，最多重试 3 次。
 
+## 接入大模型
+
+项目支持 OpenAI 兼容的大模型接口。复制 `.env.example` 为 `.env`，填写本地密钥：
+
+```bash
+copy .env.example .env
+```
+
+`.env` 示例：
+
+```text
+WEBTASK_PLANNER=hybrid
+OPENAI_API_KEY=<your-openai-api-key>
+OPENAI_MODEL=gpt-4o-mini
+```
+
+如果使用其他 OpenAI 兼容服务，可以额外配置：
+
+```text
+OPENAI_BASE_URL=<openai-compatible-base-url>
+```
+
+启动 API 后，可以通过接口检查配置状态。接口只返回是否已配置，不返回密钥内容：
+
+```bash
+curl http://localhost:8000/api/config
+```
+
+Streamlit 侧边栏也会显示：
+
+```text
+LLM connected / LLM not configured
+Model
+Base URL
+Default planner
+```
+
 ## Trace 和报告
 
 查询 Trace：
