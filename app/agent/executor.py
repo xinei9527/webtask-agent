@@ -86,16 +86,28 @@ class ToolExecutor:
             return await self.tools.type_by_selector(args["selector"], args["value"])
         if tool == "type_by_label":
             return await self.tools.type_by_label(args["label"], args["value"])
+        if tool == "select_option":
+            return await self.tools.select_option(args["selector_or_label"], args["value"])
+        if tool == "hover":
+            return await self.tools.hover(args["selector_or_text"])
         if tool == "press":
             return await self.tools.press(args["key"])
+        if tool == "wait":
+            return await self.tools.wait(float(args.get("seconds", 1.0)))
         if tool == "wait_for_text":
             return await self.tools.wait_for_text(args["text"], int(args.get("timeout_ms", 8000)))
         if tool == "extract_text":
             return await self.tools.extract_text(args.get("selector", "body"))
         if tool == "extract_links":
             return await self.tools.extract_links(args.get("selector", "a"), int(args.get("limit", 20)))
+        if tool == "extract_table":
+            return await self.tools.extract_table(args.get("selector", "table"), int(args.get("limit", 5)))
         if tool == "scroll":
             return await self.tools.scroll(int(args.get("pixels", 800)))
+        if tool == "go_back":
+            return await self.tools.go_back()
+        if tool == "current_page":
+            return await self.tools.current_page()
         if tool == "screenshot":
             return await self.tools.screenshot(args["path"])
         if tool == "finish":

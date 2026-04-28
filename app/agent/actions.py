@@ -14,11 +14,17 @@ ToolName = Literal[
     "type_text",
     "type_by_selector",
     "type_by_label",
+    "select_option",
+    "hover",
     "press",
+    "wait",
     "wait_for_text",
     "extract_text",
     "extract_links",
+    "extract_table",
     "scroll",
+    "go_back",
+    "current_page",
     "screenshot",
     "finish",
 ]
@@ -31,11 +37,17 @@ REQUIRED_ARGS: dict[str, tuple[str, ...]] = {
     "type_text": ("selector_or_text", "text"),
     "type_by_selector": ("selector", "value"),
     "type_by_label": ("label", "value"),
+    "select_option": ("selector_or_label", "value"),
+    "hover": ("selector_or_text",),
     "press": ("key",),
+    "wait": (),
     "wait_for_text": ("text",),
     "extract_text": (),
     "extract_links": (),
+    "extract_table": (),
     "scroll": (),
+    "go_back": (),
+    "current_page": (),
     "screenshot": ("path",),
     "finish": ("answer",),
 }
@@ -68,6 +80,13 @@ class AgentAction(BaseModel):
                 args["text"] = args["value"]
         if tool in {"type_by_selector", "type_by_label"} and "value" not in args and "text" in args:
             args["value"] = args["text"]
+        if tool == "select_option":
+            if "selector_or_label" not in args:
+                args["selector_or_label"] = args.get("selector") or args.get("label")
+            if "value" not in args:
+                args["value"] = args.get("label_value") or args.get("text")
+        if tool == "hover" and "selector_or_text" not in args:
+            args["selector_or_text"] = args.get("text") or args.get("selector")
 
         data["args"] = args
         return data

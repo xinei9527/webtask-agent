@@ -43,7 +43,7 @@ planner_mode = st.selectbox(
     "Planner",
     options=["hybrid", "rule", "llm"],
     index=0,
-    help="hybrid 会让本地稳定任务走规则，非 MVP 任务在配置 OPENAI_API_KEY 后走大模型。",
+    help="hybrid 在配置 OPENAI_API_KEY 后优先走大模型；无 Key 或模型不可用时走规则兜底。",
 )
 
 if col_run.button("运行任务", type="primary", use_container_width=True):

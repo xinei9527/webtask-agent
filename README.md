@@ -75,7 +75,7 @@ curl -X POST http://localhost:8000/api/tasks/run ^
 ```text
 rule   ：只使用规则 Planner，适合稳定演示和评测。
 llm    ：只使用大模型 Planner，需要配置 OPENAI_API_KEY。
-hybrid ：默认模式。MVP 稳定任务走规则；未知任务在有 OPENAI_API_KEY 时走大模型。
+hybrid ：默认模式。有 OPENAI_API_KEY 时优先走大模型；大模型不可用或未配置时走规则兜底。
 ```
 
 环境变量示例：
@@ -87,6 +87,29 @@ set OPENAI_MODEL=gpt-4o-mini
 ```
 
 LLM Planner 的输出会经过 `AgentAction` Pydantic schema 校验，只允许白名单工具，并检查必要参数。模型输出 JSON 解析失败、工具名非法或参数缺失时，会自动要求模型重新输出合法动作，最多重试 3 次。
+
+## 通用浏览器 Agent 能力
+
+配置大模型后，`hybrid` 和 `llm` 模式会根据页面观察结果自主选择下一步动作。Agent 会优先使用 `actionable_elements` 中的稳定 selector，也可以根据文本、label、placeholder、页面正文和历史执行记录进行决策。
+
+当前通用工具集：
+
+```text
+open_url / click / type_text / select_option / hover
+press / wait / wait_for_text / scroll / go_back
+extract_text / extract_links / extract_table / current_page / screenshot / finish
+```
+
+建议演示方式：
+
+```text
+1. 先配置 OPENAI_API_KEY。
+2. 在 Streamlit 里选择 Planner = hybrid 或 llm。
+3. 输入带 URL 或明确站点的任务。
+4. 查看 Trace、截图、工具调用分布和 Markdown 报告。
+```
+
+说明：这个项目采用“受控通用 Agent”设计。Agent 可以处理更广泛的网页任务，但仍通过动作白名单、参数 schema、最大步骤数、失败重试和 Trace 报告保证可控性。
 
 ## 接入大模型
 

@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 import json
-import os
 import re
 from pathlib import Path
 from typing import Any
 
 from app.agent.actions import PlannerMode, make_action, validate_action
-from app.config import get_llm_config
 from app.agent.prompts import SYSTEM_PROMPT
+from app.config import get_llm_config
 
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
@@ -80,25 +79,6 @@ def _has_action(state: dict[str, Any], tool: str, key: str, value: str) -> bool:
         if item.get("tool") == tool and item.get("success") and args.get(key) == value:
             return True
     return False
-
-
-def _is_known_mvp_task(task: str) -> bool:
-    return any(
-        keyword in task
-        for keyword in (
-            "搜索",
-            "检索",
-            "百度",
-            "表单",
-            "填写",
-            "手机号",
-            "提交",
-            "商品",
-            "价格最低",
-            "产品",
-            "最便宜",
-        )
-    )
 
 
 def _format_links(output: Any, limit: int = 3) -> str:
@@ -187,7 +167,7 @@ class RulePlanner:
         phone = _extract_phone(task)
 
         if not _has_tool(state, "open_url"):
-            return make_action("open_url", {"url": url}, "打开本地表单页面")
+            return make_action("open_url", {"url": url}, "打开表单页面")
         if not _has_action(state, "type_by_label", "label", "姓名"):
             return make_action("type_by_label", {"label": "姓名", "value": name}, "填写姓名字段")
         if not _has_action(state, "type_by_label", "label", "手机号"):
@@ -209,7 +189,7 @@ class RulePlanner:
         return make_action(
             "finish",
             {"answer": _lowest_product_from_text(str(_last_output(state) or ""))},
-            "已经根据价格计算出最低价商品",
+            "根据价格计算最低价商品",
         )
 
     def _generic_action(self, state: dict[str, Any]) -> dict[str, Any]:
@@ -223,8 +203,8 @@ class RulePlanner:
             return make_action("finish", {"answer": str(_last_output(state) or "")[:1200]}, "页面文本已经提取")
         return make_action(
             "finish",
-            {"answer": "当前 MVP 支持网页检索、表单填写和商品/信息抽取任务。请尝试描述这三类任务。"},
-            "任务类型不在当前 MVP 支持范围内",
+            {"answer": "当前未配置大模型。通用浏览器 Agent 需要配置 OPENAI_API_KEY；未配置时仅支持规则兜底任务。"},
+            "无大模型配置，无法泛化执行未知任务",
         )
 
 
@@ -250,8 +230,10 @@ class LLMPlanner:
         payload = {
             "user_task": state.get("user_task"),
             "observation": state.get("observation"),
-            "history": state.get("history", [])[-6:],
+            "history": state.get("history", [])[-8:],
             "last_error": state.get("error"),
+            "current_step": state.get("current_step"),
+            "max_steps": state.get("max_steps"),
         }
 
         validation_error = ""
@@ -278,8 +260,8 @@ class LLMPlanner:
                 return parse_action_json(raw)
             except Exception as exc:
                 validation_error = (
-                    "上一次输出无法被执行。请只返回一个合法 JSON 对象，"
-                    f"错误原因：{exc}。原始输出：{raw[:800]}"
+                    "The previous output could not be executed. Return one valid JSON object only. "
+                    f"Validation error: {exc}. Raw output: {raw[:800]}"
                 )
 
         raise ValueError(f"LLM planner failed to produce a valid action after {LLM_PARSE_RETRIES} attempts.")
@@ -319,14 +301,20 @@ class HybridPlanner:
             raise RuntimeError("planner_mode='llm' requires OPENAI_API_KEY.")
 
     async def next_action(self, state: dict[str, Any]) -> dict[str, Any]:
-        task = state["user_task"]
-
         if self.mode == "rule":
             return self.rule_planner.next_action(state)
+
         if self.mode == "llm":
             if self.llm_planner is None:
                 raise RuntimeError("LLM planner is not available.")
             return await self.llm_planner.next_action(state)
-        if _is_known_mvp_task(task) or self.llm_planner is None:
-            return self.rule_planner.next_action(state)
-        return await self.llm_planner.next_action(state)
+
+        if self.llm_planner is not None:
+            try:
+                return await self.llm_planner.next_action(state)
+            except Exception as exc:
+                fallback = self.rule_planner.next_action(state)
+                fallback["reason"] = f"LLM planner failed, falling back to rule planner: {exc}"
+                return fallback
+
+        return self.rule_planner.next_action(state)

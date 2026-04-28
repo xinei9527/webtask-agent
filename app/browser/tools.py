@@ -89,6 +89,43 @@ class BrowserTools:
         await self.page.locator(selector).first.fill(value)
         return f"Typed into selector {selector}: {value}"
 
+    async def select_option(self, selector_or_label: str, value: str) -> str:
+        target = selector_or_label.strip()
+        errors: list[str] = []
+        candidates = []
+        if _looks_like_selector(target):
+            candidates.append(self.page.locator(target))
+        candidates.extend(
+            [
+                self.page.get_by_label(target, exact=False),
+                self.page.locator(target) if _looks_like_selector(target) else None,
+            ]
+        )
+
+        for locator in candidates:
+            if locator is None:
+                continue
+            try:
+                await locator.first.select_option(label=value)
+                return f"Selected option label {value} in {target}"
+            except Exception as exc:
+                errors.append(str(exc))
+            try:
+                await locator.first.select_option(value=value)
+                return f"Selected option value {value} in {target}"
+            except Exception as exc:
+                errors.append(str(exc))
+
+        raise RuntimeError(f"Select target not found: {target}. Last error: {errors[-1] if errors else 'none'}")
+
+    async def hover(self, selector_or_text: str) -> str:
+        target = selector_or_text.strip()
+        if _looks_like_selector(target):
+            await self.page.locator(target).first.hover()
+            return f"Hovered selector: {target}"
+        await self.page.get_by_text(target, exact=False).first.hover()
+        return f"Hovered text: {target}"
+
     async def press(self, key: str) -> str:
         await self.page.keyboard.press(key)
         try:
@@ -96,6 +133,10 @@ class BrowserTools:
         except PlaywrightTimeoutError:
             pass
         return f"Pressed {key}"
+
+    async def wait(self, seconds: float = 1.0) -> str:
+        await self.page.wait_for_timeout(int(seconds * 1000))
+        return f"Waited {seconds} seconds"
 
     async def wait_for_text(self, text: str, timeout_ms: int = 8000) -> str:
         await self.page.get_by_text(text, exact=False).first.wait_for(timeout=timeout_ms)
@@ -117,9 +158,35 @@ class BrowserTools:
         )
         return links
 
+    async def extract_table(self, selector: str = "table", limit: int = 5) -> list[dict[str, Any]]:
+        tables: list[dict[str, Any]] = await self.page.locator(selector).evaluate_all(
+            """
+            (tables, limit) => tables.slice(0, limit).map((table, tableIndex) => {
+                const rows = Array.from(table.querySelectorAll('tr')).map(tr =>
+                    Array.from(tr.querySelectorAll('th,td')).map(cell =>
+                        (cell.innerText || cell.textContent || '').trim()
+                    )
+                ).filter(row => row.some(Boolean));
+                return { tableIndex, rows };
+            }).filter(table => table.rows.length > 0)
+            """,
+            limit,
+        )
+        return tables
+
     async def scroll(self, pixels: int = 800) -> str:
         await self.page.mouse.wheel(0, pixels)
         return f"Scrolled {pixels}px"
+
+    async def go_back(self) -> str:
+        await self.page.go_back(wait_until="domcontentloaded")
+        return "Went back"
+
+    async def current_page(self) -> dict[str, str]:
+        return {
+            "title": await self.page.title(),
+            "url": self.page.url,
+        }
 
     async def screenshot(self, path: str) -> str:
         target = Path(path)
