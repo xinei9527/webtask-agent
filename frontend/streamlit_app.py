@@ -96,7 +96,15 @@ if st.button("查看 Trace / 报告", use_container_width=True) and task_id:
         metric_cols[3].metric("Screenshots", summary.get("screenshot_count", 0))
         metric_cols[4].metric("Cost ms", summary.get("total_recorded_cost_ms", total_cost))
 
-        tab_trace, tab_report, tab_stats = st.tabs(["Trace", "Report", "Stats"])
+        tab_ai, tab_trace, tab_report, tab_stats = st.tabs(["AI Plan", "Trace", "Report", "Stats"])
+
+        with tab_ai:
+            st.write("Task Blueprint")
+            st.json(summary.get("ai_task_blueprint") or {})
+            st.write("Result Judgement")
+            st.json(summary.get("ai_result_judgement") or {})
+            st.write("Failure Reflections")
+            st.json(summary.get("ai_failure_reflections") or [])
 
         with tab_trace:
             for step in trace:

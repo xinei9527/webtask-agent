@@ -229,8 +229,10 @@ class LLMPlanner:
     async def next_action(self, state: dict[str, Any]) -> dict[str, Any]:
         payload = {
             "user_task": state.get("user_task"),
+            "task_blueprint": state.get("task_blueprint"),
             "observation": state.get("observation"),
             "history": state.get("history", [])[-8:],
+            "recovery_notes": state.get("recovery_notes", [])[-3:],
             "last_error": state.get("error"),
             "current_step": state.get("current_step"),
             "max_steps": state.get("max_steps"),

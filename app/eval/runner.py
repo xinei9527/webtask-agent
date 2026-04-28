@@ -34,6 +34,12 @@ def run_eval(api_base: str) -> dict[str, Any]:
             )
             resp.raise_for_status()
             data = resp.json()
+            report_data: dict[str, Any] = {}
+            if data.get("task_id"):
+                report_resp = requests.get(f"{api_base}/api/tasks/{data['task_id']}/report", timeout=60)
+                if report_resp.ok:
+                    report_data = report_resp.json()
+            ai_judgement = (report_data.get("summary") or {}).get("ai_result_judgement") or {}
             final_result = data.get("final_result") or ""
             keyword_ok = all(keyword in final_result for keyword in case["expected_keywords"])
             success = data.get("status") == "completed" and keyword_ok
@@ -52,6 +58,9 @@ def run_eval(api_base: str) -> dict[str, Any]:
                     "elapsed_ms": data.get("elapsed_ms"),
                     "final_result": final_result,
                     "failure_type": failure_type,
+                    "ai_judgement_passed": ai_judgement.get("passed"),
+                    "ai_judgement_confidence": ai_judgement.get("confidence"),
+                    "ai_mode": ai_judgement.get("ai_mode"),
                 }
             )
         except Exception as exc:

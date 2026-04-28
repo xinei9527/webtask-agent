@@ -8,6 +8,7 @@ from langgraph.graph import END, StateGraph
 
 from app.agent.executor import ToolExecutor, run_action_with_retry
 from app.agent.actions import PlannerMode
+from app.agent.intelligence import analyze_task, judge_result, reflect_failure
 from app.agent.planner import HybridPlanner
 from app.agent.verifier import verify_state
 from app.browser.observer import observe_page
@@ -32,6 +33,8 @@ class AgentState(TypedDict, total=False):
     history: list[dict[str, Any]]
     started_at: float
     planner_mode: str
+    task_blueprint: dict[str, Any]
+    recovery_notes: list[dict[str, Any]]
 
 
 def _env_headless() -> bool:
@@ -127,6 +130,31 @@ def build_agent_graph(
     async def verifier_node(state: AgentState) -> AgentState:
         start = time.time()
         updates = verify_state(dict(state))
+        result = state.get("result") or {}
+        if not result.get("success") and not updates.get("done"):
+            reflection = await reflect_failure(
+                user_task=state["user_task"],
+                action=state.get("action") or {},
+                error=result.get("error") or "",
+                observation=state.get("observation"),
+                history=state.get("history", []),
+            )
+            recovery_notes = list(state.get("recovery_notes", []))
+            recovery_notes.append(reflection.model_dump())
+            updates["recovery_notes"] = recovery_notes
+            await trace.record(
+                task_id=state["task_id"],
+                step_index=max(0, state.get("current_step", 1) - 1),
+                node_name="ai_failure_reflector",
+                action_type="reflect_failure",
+                action_input={
+                    "action": state.get("action"),
+                    "error": result.get("error"),
+                },
+                observation=reflection.model_dump(),
+                success=True,
+                cost_ms=int((time.time() - start) * 1000),
+            )
         await trace.record(
             task_id=state["task_id"],
             step_index=max(0, state.get("current_step", 1) - 1),
@@ -179,9 +207,21 @@ class AgentRunner:
         started_at = time.time()
 
         try:
+            trace = TraceRecorder()
+            blueprint = await analyze_task(user_task)
+            await trace.record(
+                task_id=task_id,
+                step_index=-1,
+                node_name="ai_task_analyzer",
+                action_type="analyze_task",
+                action_input={"user_task": user_task},
+                observation=blueprint.model_dump(),
+                success=True,
+                cost_ms=int((time.time() - started_at) * 1000),
+            )
+
             page = await session.start(headless=self.headless)
             tools = BrowserTools(page)
-            trace = TraceRecorder()
             planner = HybridPlanner(mode=self.planner_mode)
             graph = build_agent_graph(page, tools, trace, planner)
 
@@ -201,13 +241,36 @@ class AgentRunner:
                     "history": [],
                     "started_at": started_at,
                     "planner_mode": self.planner_mode,
+                    "task_blueprint": blueprint.model_dump(),
+                    "recovery_notes": [],
                 },
                 config={"recursion_limit": self.max_steps * 5},
             )
 
             error = final_state.get("error")
             final_result = final_state.get("final_result")
-            status = "failed" if error else "completed"
+            judgement = await judge_result(
+                user_task=user_task,
+                final_result=final_result,
+                error=error,
+                history=final_state.get("history", []),
+            )
+            await trace.record(
+                task_id=task_id,
+                step_index=final_state.get("current_step", 0),
+                node_name="ai_result_judge",
+                action_type="judge_result",
+                action_input={
+                    "user_task": user_task,
+                    "final_result": final_result,
+                    "error": error,
+                },
+                observation=judgement.model_dump(),
+                success=judgement.passed,
+                error_message=None if judgement.passed else judgement.rationale,
+                cost_ms=0,
+            )
+            status = "failed" if error else ("completed" if judgement.passed else "needs_review")
             update_task_run(
                 task_id=task_id,
                 status=status,
@@ -223,6 +286,8 @@ class AgentRunner:
                 "steps": final_state.get("current_step", 0),
                 "elapsed_ms": int((time.time() - started_at) * 1000),
                 "planner_mode": self.planner_mode,
+                "task_blueprint": blueprint.model_dump(),
+                "result_judgement": judgement.model_dump(),
                 "trace": list_trace(task_id),
             }
 

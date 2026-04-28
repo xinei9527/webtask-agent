@@ -61,6 +61,9 @@ def build_trace_summary(task: dict[str, Any], trace: list[dict[str, Any]]) -> di
     rows = normalize_trace_rows(trace)
     executor_rows = [row for row in rows if row.get("node_name") == "executor"]
     failed_rows = [row for row in rows if not row.get("success")]
+    ai_task_row = next((row for row in rows if row.get("node_name") == "ai_task_analyzer"), None)
+    ai_judge_row = next((row for row in rows if row.get("node_name") == "ai_result_judge"), None)
+    reflection_rows = [row for row in rows if row.get("node_name") == "ai_failure_reflector"]
     screenshots = [row.get("screenshot_path") for row in rows if row.get("screenshot_path")]
     tool_counts = Counter(row.get("action_type") or "unknown" for row in executor_rows)
     node_counts = Counter(row.get("node_name") or "unknown" for row in rows)
@@ -84,6 +87,9 @@ def build_trace_summary(task: dict[str, Any], trace: list[dict[str, Any]]) -> di
         "node_counts": dict(node_counts),
         "failure_counts": dict(failure_counts),
         "first_error": next((row.get("error_message") for row in failed_rows if row.get("error_message")), None),
+        "ai_task_blueprint": ai_task_row.get("observation") if ai_task_row else None,
+        "ai_result_judgement": ai_judge_row.get("observation") if ai_judge_row else None,
+        "ai_failure_reflections": [row.get("observation") for row in reflection_rows],
     }
 
 
@@ -133,6 +139,18 @@ def build_markdown_report(task: dict[str, Any], trace: list[dict[str, Any]]) -> 
         "## Final Result",
         "",
         str(summary.get("final_result") or summary.get("error_message") or ""),
+        "",
+        "## AI Task Blueprint",
+        "",
+        json.dumps(summary.get("ai_task_blueprint") or {}, ensure_ascii=False, indent=2),
+        "",
+        "## AI Result Judgement",
+        "",
+        json.dumps(summary.get("ai_result_judgement") or {}, ensure_ascii=False, indent=2),
+        "",
+        "## AI Failure Reflections",
+        "",
+        json.dumps(summary.get("ai_failure_reflections") or [], ensure_ascii=False, indent=2),
         "",
         "## Tool Counts",
         "",

@@ -111,6 +111,20 @@ extract_text / extract_links / extract_table / current_page / screenshot / finis
 
 说明：这个项目采用“受控通用 Agent”设计。Agent 可以处理更广泛的网页任务，但仍通过动作白名单、参数 schema、最大步骤数、失败重试和 Trace 报告保证可控性。
 
+## AI Intelligence Layer
+
+为了让系统不只是浏览器自动化脚本，项目增加了独立的 AI 认知层：
+
+```text
+Task Blueprint       ：任务类型、目标、成功标准、计划步骤、推荐工具、风险点
+LLM-first Planner    ：有大模型配置时优先由模型根据页面观察选择下一步动作
+Failure Reflection   ：工具失败后分析失败类型、可能原因、恢复策略和下一步建议
+Result Judgement     ：任务结束后判断结果是否满足用户目标，并输出置信度和缺失项
+AI Trace             ：以上 AI 分析结果全部写入 Trace 和 Markdown 报告
+```
+
+没有配置大模型时，系统会使用启发式分析作为兜底；配置 `OPENAI_API_KEY` 后，这些模块会切换为大模型驱动。
+
 ## 接入大模型
 
 项目支持 OpenAI 兼容的大模型接口。复制 `.env.example` 为 `.env`，填写本地密钥：
@@ -227,6 +241,8 @@ docker run --rm -p 8000:8000 webtask-agent
 
 ## 项目亮点
 
+- AI 任务分析：任务开始前生成任务类型、目标、成功标准、建议步骤、推荐工具和风险点，并写入 Trace。
+- AI 结果判定：任务结束后对最终结果进行通过/不通过判断，输出置信度、简短依据、缺失项和建议动作。
 - 结构化页面观察：抽取页面标题、URL、文本摘要、链接、按钮、输入框和 `actionable_elements`，避免直接把完整 DOM 交给 Planner。
 - 可控动作空间：所有 Planner 动作都经过 `AgentAction` schema 校验，降低大模型幻觉工具和参数错误风险。
 - 可观测执行链路：观察、规划、执行、校验节点都会记录 Trace，便于复盘每一步行为。
