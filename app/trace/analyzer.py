@@ -63,11 +63,37 @@ def build_trace_summary(task: dict[str, Any], trace: list[dict[str, Any]]) -> di
     failed_rows = [row for row in rows if not row.get("success")]
     ai_task_row = next((row for row in rows if row.get("node_name") == "ai_task_analyzer"), None)
     ai_judge_row = next((row for row in rows if row.get("node_name") == "ai_result_judge"), None)
+    ai_synthesis_row = next((row for row in rows if row.get("node_name") == "ai_answer_synthesizer"), None)
+    policy_rows = [row for row in rows if row.get("node_name") == "ai_action_policy"]
+    critic_rows = [row for row in rows if row.get("node_name") == "ai_step_critic"]
     reflection_rows = [row for row in rows if row.get("node_name") == "ai_failure_reflector"]
     screenshots = [row.get("screenshot_path") for row in rows if row.get("screenshot_path")]
     tool_counts = Counter(row.get("action_type") or "unknown" for row in executor_rows)
     node_counts = Counter(row.get("node_name") or "unknown" for row in rows)
     failure_counts = Counter(row["failure_type"] for row in failed_rows)
+    ai_observations = [
+        row.get("observation")
+        for row in rows
+        if str(row.get("node_name") or "").startswith("ai_") and isinstance(row.get("observation"), dict)
+    ]
+    ai_mode_counts = Counter(str(item.get("ai_mode") or "unknown") for item in ai_observations)
+    depth_signals = {
+        "task_blueprint": bool(ai_task_row),
+        "action_policy_checks": len(policy_rows),
+        "step_critic_checks": len(critic_rows),
+        "failure_reflections": len(reflection_rows),
+        "result_judgement": bool(ai_judge_row),
+        "answer_synthesis": bool(ai_synthesis_row),
+    }
+    depth_score = min(
+        100,
+        20 * int(depth_signals["task_blueprint"])
+        + 20 * int(bool(depth_signals["action_policy_checks"]))
+        + 20 * int(bool(depth_signals["step_critic_checks"]))
+        + 15 * int(depth_signals["result_judgement"])
+        + 15 * int(depth_signals["answer_synthesis"])
+        + 10 * int(bool(depth_signals["failure_reflections"])),
+    )
 
     return {
         "task_id": task.get("id"),
@@ -88,8 +114,14 @@ def build_trace_summary(task: dict[str, Any], trace: list[dict[str, Any]]) -> di
         "failure_counts": dict(failure_counts),
         "first_error": next((row.get("error_message") for row in failed_rows if row.get("error_message")), None),
         "ai_task_blueprint": ai_task_row.get("observation") if ai_task_row else None,
+        "ai_action_policies": [row.get("observation") for row in policy_rows],
+        "ai_step_assessments": [row.get("observation") for row in critic_rows],
         "ai_result_judgement": ai_judge_row.get("observation") if ai_judge_row else None,
+        "ai_answer_synthesis": ai_synthesis_row.get("observation") if ai_synthesis_row else None,
         "ai_failure_reflections": [row.get("observation") for row in reflection_rows],
+        "ai_mode_counts": dict(ai_mode_counts),
+        "agent_depth_signals": depth_signals,
+        "agent_depth_score": depth_score,
     }
 
 
@@ -144,13 +176,37 @@ def build_markdown_report(task: dict[str, Any], trace: list[dict[str, Any]]) -> 
         "",
         json.dumps(summary.get("ai_task_blueprint") or {}, ensure_ascii=False, indent=2),
         "",
+        "## AI Action Policy Checks",
+        "",
+        json.dumps(summary.get("ai_action_policies") or [], ensure_ascii=False, indent=2),
+        "",
+        "## AI Step Critic",
+        "",
+        json.dumps(summary.get("ai_step_assessments") or [], ensure_ascii=False, indent=2),
+        "",
         "## AI Result Judgement",
         "",
         json.dumps(summary.get("ai_result_judgement") or {}, ensure_ascii=False, indent=2),
         "",
+        "## AI Answer Synthesis",
+        "",
+        json.dumps(summary.get("ai_answer_synthesis") or {}, ensure_ascii=False, indent=2),
+        "",
         "## AI Failure Reflections",
         "",
         json.dumps(summary.get("ai_failure_reflections") or [], ensure_ascii=False, indent=2),
+        "",
+        "## Agent Depth Signals",
+        "",
+        json.dumps(
+            {
+                "score": summary.get("agent_depth_score"),
+                "signals": summary.get("agent_depth_signals"),
+                "ai_mode_counts": summary.get("ai_mode_counts"),
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
         "",
         "## Tool Counts",
         "",

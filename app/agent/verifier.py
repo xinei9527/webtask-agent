@@ -22,7 +22,7 @@ def verify_state(state: dict[str, Any]) -> dict[str, Any]:
                 "done": True,
                 "failure_count": failure_count,
                 "final_result": None,
-                "error": result.get("error") or "连续失败 3 次，任务终止。",
+                "error": result.get("error") or "Action failed 3 times; task stopped.",
             }
         return {
             "done": False,
@@ -34,7 +34,7 @@ def verify_state(state: dict[str, Any]) -> dict[str, Any]:
         return {
             "done": True,
             "final_result": None,
-            "error": "达到最大步骤数，任务终止。",
+            "error": "Reached max_steps; task stopped.",
         }
 
     return {
