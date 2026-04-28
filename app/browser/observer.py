@@ -48,6 +48,58 @@ async def observe_page(page: Page) -> dict[str, Any]:
             ariaLabel: i.getAttribute('aria-label') || ''
         }))""",
     )
+    actionable_elements = await safe_eval(
+        "a, button, input, textarea, select, [role='button'], [role='link']",
+        """
+        els => {
+            const cssEscape = value => {
+                if (window.CSS && CSS.escape) return CSS.escape(value);
+                return String(value).replace(/["\\\\]/g, '\\\\$&');
+            };
+            const textOf = el => (
+                el.innerText ||
+                el.value ||
+                el.getAttribute('aria-label') ||
+                el.getAttribute('placeholder') ||
+                el.name ||
+                el.id ||
+                ''
+            ).trim();
+            const selectorOf = el => {
+                const tag = el.tagName.toLowerCase();
+                if (el.id) return `#${cssEscape(el.id)}`;
+                if (el.name) return `${tag}[name="${cssEscape(el.name)}"]`;
+                if (el.getAttribute('aria-label')) {
+                    return `${tag}[aria-label="${cssEscape(el.getAttribute('aria-label'))}"]`;
+                }
+                if (el.getAttribute('placeholder')) {
+                    return `${tag}[placeholder="${cssEscape(el.getAttribute('placeholder'))}"]`;
+                }
+                return tag;
+            };
+            return els
+                .filter(el => {
+                    const rect = el.getBoundingClientRect();
+                    const style = window.getComputedStyle(el);
+                    return rect.width > 0 && rect.height > 0 &&
+                        style.visibility !== 'hidden' &&
+                        style.display !== 'none';
+                })
+                .slice(0, 40)
+                .map((el, index) => ({
+                    index,
+                    tag: el.tagName.toLowerCase(),
+                    role: el.getAttribute('role') || el.tagName.toLowerCase(),
+                    text: textOf(el).slice(0, 120),
+                    selector: selectorOf(el),
+                    href: el.href || '',
+                    type: el.type || '',
+                    placeholder: el.getAttribute('placeholder') || '',
+                    ariaLabel: el.getAttribute('aria-label') || ''
+                }));
+        }
+        """,
+    )
 
     return {
         "title": title,
@@ -56,5 +108,6 @@ async def observe_page(page: Page) -> dict[str, Any]:
         "links": links,
         "buttons": buttons,
         "inputs": inputs,
+        "actionable_elements": actionable_elements,
         "cost_ms": int((time.time() - start) * 1000),
     }

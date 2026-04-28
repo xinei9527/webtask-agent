@@ -57,31 +57,64 @@ if col_run.button("运行任务", type="primary", use_container_width=True):
 
 task_id = st.text_input("查询 Trace Task ID", value=str(st.session_state.get("last_task_id", "")))
 
-if st.button("查看 Trace", use_container_width=True) and task_id:
+if st.button("查看 Trace / 报告", use_container_width=True) and task_id:
     trace_resp = requests.get(f"{API_BASE}/api/tasks/{task_id}/trace", timeout=60)
+    report_resp = requests.get(f"{API_BASE}/api/tasks/{task_id}/report", timeout=60)
     if not trace_resp.ok:
         st.error(trace_resp.text)
+    elif not report_resp.ok:
+        st.error(report_resp.text)
     else:
         trace = trace_resp.json()
+        report = report_resp.json()
+        summary = report.get("summary", {})
         total_cost = sum(step.get("cost_ms") or 0 for step in trace)
-        st.subheader("执行步骤时间线")
-        st.caption(f"Trace events: {len(trace)} | Recorded cost: {total_cost} ms")
 
-        for step in trace:
-            title = f"Step {step['step_index']} · {step['node_name']} · {step.get('action_type') or ''}"
-            with st.expander(title, expanded=step["node_name"] == "executor"):
-                left, right = st.columns([2, 1])
-                with left:
-                    st.json(
-                        {
-                            "action_input": step.get("action_input"),
-                            "observation": step.get("observation"),
-                            "success": bool(step.get("success")),
-                            "error_message": step.get("error_message"),
-                            "cost_ms": step.get("cost_ms"),
-                        }
-                    )
-                with right:
-                    screenshot_path = step.get("screenshot_path")
-                    if screenshot_path and Path(screenshot_path).exists():
-                        st.image(screenshot_path, caption=Path(screenshot_path).name, use_container_width=True)
+        st.subheader("执行概览")
+        metric_cols = st.columns(5)
+        metric_cols[0].metric("Executor Steps", summary.get("executor_steps", 0))
+        metric_cols[1].metric("Trace Events", summary.get("trace_events", len(trace)))
+        metric_cols[2].metric("Failed Events", summary.get("failed_events", 0))
+        metric_cols[3].metric("Screenshots", summary.get("screenshot_count", 0))
+        metric_cols[4].metric("Cost ms", summary.get("total_recorded_cost_ms", total_cost))
+
+        tab_trace, tab_report, tab_stats = st.tabs(["Trace", "Report", "Stats"])
+
+        with tab_trace:
+            for step in trace:
+                title = f"Step {step['step_index']} - {step['node_name']} - {step.get('action_type') or ''}"
+                with st.expander(title, expanded=step["node_name"] == "executor"):
+                    left, right = st.columns([2, 1])
+                    with left:
+                        st.json(
+                            {
+                                "action_input": step.get("action_input"),
+                                "observation": step.get("observation"),
+                                "success": bool(step.get("success")),
+                                "error_message": step.get("error_message"),
+                                "cost_ms": step.get("cost_ms"),
+                            }
+                        )
+                    with right:
+                        screenshot_path = step.get("screenshot_path")
+                        if screenshot_path and Path(screenshot_path).exists():
+                            st.image(screenshot_path, caption=Path(screenshot_path).name, use_container_width=True)
+
+        with tab_report:
+            markdown = report.get("markdown", "")
+            st.download_button(
+                "下载 Markdown 报告",
+                data=markdown,
+                file_name=f"webtask-report-{task_id}.md",
+                mime="text/markdown",
+                use_container_width=True,
+            )
+            st.markdown(markdown)
+
+        with tab_stats:
+            st.write("Tool Counts")
+            st.json(summary.get("tool_counts", {}))
+            st.write("Node Counts")
+            st.json(summary.get("node_counts", {}))
+            st.write("Failure Counts")
+            st.json(summary.get("failure_counts", {}))

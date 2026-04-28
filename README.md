@@ -117,3 +117,11 @@ curl -X POST http://localhost:8000/api/tasks/run ^
 ```
 
 LLM Planner 的输出会经过 `AgentAction` Pydantic schema 校验，只允许白名单工具，并检查必要参数。模型输出 JSON 解析失败、工具名非法或参数缺失时，会自动要求模型重新输出合法动作，最多重试 3 次。
+
+## Project Highlights
+
+- Structured page observation: the observer extracts title, URL, text summary, links, buttons, inputs, and `actionable_elements` instead of sending full DOM content to the planner.
+- Controlled action space: every planner action is validated by the `AgentAction` Pydantic schema before execution.
+- Observable execution trace: each observe, plan, execute, and verify node records action input, observation, screenshot path, latency, success status, and error details.
+- Failure analysis report: `GET /api/tasks/{task_id}/report` returns a summary, tool distribution, node distribution, failure type distribution, timeline, and a Markdown report.
+- Evaluation-ready workflow: the built-in 20-case task set reports success rate, average steps, average latency, and failure categories.

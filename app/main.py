@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 from app.agent.graph import AgentRunner, get_task_result
 from app.db.database import init_db, list_task_runs, list_trace
+from app.trace.analyzer import build_task_report
 
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -100,3 +101,11 @@ async def get_result(task_id: int) -> dict[str, Any]:
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     return task
+
+
+@app.get("/api/tasks/{task_id}/report")
+async def get_report(task_id: int) -> dict[str, Any]:
+    report = build_task_report(task_id)
+    if not report:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return report
