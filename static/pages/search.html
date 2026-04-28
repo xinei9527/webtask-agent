@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>本地搜索</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, "Microsoft YaHei", sans-serif;
+      background: #f8fafc;
+      color: #111827;
+    }
+    main {
+      max-width: 860px;
+      margin: 56px auto;
+      padding: 0 24px;
+    }
+    form {
+      display: grid;
+      grid-template-columns: 1fr 96px;
+      gap: 12px;
+      margin: 24px 0 28px;
+    }
+    input {
+      min-width: 0;
+      padding: 12px 14px;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      font-size: 16px;
+    }
+    button {
+      border: 0;
+      border-radius: 6px;
+      background: #2563eb;
+      color: white;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    #results {
+      display: grid;
+      gap: 16px;
+    }
+    .result {
+      padding: 18px 0;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    .result a {
+      color: #1d4ed8;
+      font-size: 20px;
+      font-weight: 700;
+      text-decoration: none;
+    }
+    .result p {
+      margin: 8px 0 0;
+      color: #4b5563;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>本地搜索</h1>
+    <form onsubmit="runSearch(event)">
+      <input id="q" aria-label="搜索关键词" name="q" placeholder="输入关键词" />
+      <button type="submit">搜索</button>
+    </form>
+    <section id="results" aria-label="搜索结果"></section>
+  </main>
+
+  <script>
+    const baseResults = [
+      ["入门指南", "从环境安装、工具调用到任务编排的完整说明。"],
+      ["实践案例", "用一个可复现的网页任务展示自动化执行过程。"],
+      ["Trace 设计", "记录每一步动作、观察、截图和耗时。"],
+      ["失败重试", "处理页面加载慢、元素定位失败和结果为空。"],
+      ["评测方法", "统计任务成功率、平均步骤数和失败类型分布。"]
+    ];
+
+    function runSearch(event) {
+      event.preventDefault();
+      const query = document.getElementById("q").value.trim() || "Spring AI 工具调用";
+      const results = document.getElementById("results");
+      results.innerHTML = "";
+      baseResults.forEach((item, index) => {
+        const [title, desc] = item;
+        const article = document.createElement("article");
+        article.className = "result";
+        article.innerHTML = `
+          <a href="https://example.com/${encodeURIComponent(query)}/${index + 1}">
+            ${query} ${title}
+          </a>
+          <p>${desc}</p>
+        `;
+        results.appendChild(article);
+      });
+    }
+  </script>
+</body>
+</html>

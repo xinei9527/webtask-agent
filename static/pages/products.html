@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>商品列表</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, "Microsoft YaHei", sans-serif;
+      background: #f9fafb;
+      color: #111827;
+    }
+    main {
+      max-width: 760px;
+      margin: 56px auto;
+      padding: 0 24px;
+    }
+    #products {
+      display: grid;
+      gap: 12px;
+      margin-top: 24px;
+    }
+    .product {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 16px;
+      align-items: center;
+      padding: 18px 20px;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      background: #ffffff;
+    }
+    .name {
+      font-weight: 700;
+    }
+    .price {
+      color: #b91c1c;
+      font-weight: 700;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>商品列表</h1>
+    <section id="products">
+      <div class="product" data-price="4599">
+        <span class="name">轻量笔记本</span>
+        <span class="price">轻量笔记本：4599 元</span>
+      </div>
+      <div class="product" data-price="799">
+        <span class="name">降噪耳机</span>
+        <span class="price">降噪耳机：799 元</span>
+      </div>
+      <div class="product" data-price="199">
+        <span class="name">蓝牙键盘</span>
+        <span class="price">蓝牙键盘：199 元</span>
+      </div>
+      <div class="product" data-price="1299">
+        <span class="name">便携显示器</span>
+        <span class="price">便携显示器：1299 元</span>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

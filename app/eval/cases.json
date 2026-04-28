@@ -1,0 +1,122 @@
+[
+  {
+    "id": "search_001",
+    "task": "打开本地搜索页面，搜索 Spring AI 工具调用，提取前三条结果标题和链接",
+    "expected_keywords": ["Spring AI", "https://example.com"],
+    "type": "search"
+  },
+  {
+    "id": "search_002",
+    "task": "打开本地搜索页面，搜索 FastAPI Playwright，提取前三条结果标题和链接",
+    "expected_keywords": ["FastAPI Playwright"],
+    "type": "search"
+  },
+  {
+    "id": "search_003",
+    "task": "打开本地搜索页面，搜索 LangGraph Agent，提取前三条结果标题",
+    "expected_keywords": ["LangGraph Agent"],
+    "type": "search"
+  },
+  {
+    "id": "search_004",
+    "task": "打开本地搜索页面，搜索 SQLite Trace，提取前三条结果标题和链接",
+    "expected_keywords": ["SQLite Trace"],
+    "type": "search"
+  },
+  {
+    "id": "search_005",
+    "task": "打开本地搜索页面，搜索 浏览器自动化，提取前三条结果标题",
+    "expected_keywords": ["浏览器自动化"],
+    "type": "search"
+  },
+  {
+    "id": "search_006",
+    "task": "打开本地搜索页面，搜索 网页信息抽取，提取前三条结果标题",
+    "expected_keywords": ["网页信息抽取"],
+    "type": "search"
+  },
+  {
+    "id": "search_007",
+    "task": "打开本地搜索页面，搜索 任务执行追踪，提取前三条结果标题和链接",
+    "expected_keywords": ["任务执行追踪"],
+    "type": "search"
+  },
+  {
+    "id": "search_008",
+    "task": "打开本地搜索页面，搜索 Playwright locator，提取前三条结果标题和链接",
+    "expected_keywords": ["Playwright locator"],
+    "type": "search"
+  },
+  {
+    "id": "form_001",
+    "task": "打开本地测试表单页面，填写姓名李威、手机号18254130015并提交",
+    "expected_keywords": ["提交成功"],
+    "type": "form"
+  },
+  {
+    "id": "form_002",
+    "task": "打开本地测试表单页面，填写姓名王强、手机号13800001111并提交",
+    "expected_keywords": ["提交成功"],
+    "type": "form"
+  },
+  {
+    "id": "form_003",
+    "task": "打开本地测试表单页面，填写姓名赵敏、手机号13900002222并提交",
+    "expected_keywords": ["提交成功"],
+    "type": "form"
+  },
+  {
+    "id": "form_004",
+    "task": "打开本地测试表单页面，填写姓名刘洋、手机号13700003333并提交",
+    "expected_keywords": ["提交成功"],
+    "type": "form"
+  },
+  {
+    "id": "form_005",
+    "task": "打开本地测试表单页面，填写姓名陈晨、手机号13600004444并提交",
+    "expected_keywords": ["提交成功"],
+    "type": "form"
+  },
+  {
+    "id": "form_006",
+    "task": "打开本地测试表单页面，填写姓名孙雨、手机号13500005555并提交",
+    "expected_keywords": ["提交成功"],
+    "type": "form"
+  },
+  {
+    "id": "extract_001",
+    "task": "打开本地商品列表页面，提取价格最低的商品名称",
+    "expected_keywords": ["蓝牙键盘", "199"],
+    "type": "extract"
+  },
+  {
+    "id": "extract_002",
+    "task": "打开本地商品页面，告诉我价格最低的商品",
+    "expected_keywords": ["蓝牙键盘"],
+    "type": "extract"
+  },
+  {
+    "id": "extract_003",
+    "task": "打开本地产品列表，找出最便宜的产品",
+    "expected_keywords": ["蓝牙键盘"],
+    "type": "extract"
+  },
+  {
+    "id": "extract_004",
+    "task": "打开本地商品列表页面，提取最低价格",
+    "expected_keywords": ["199"],
+    "type": "extract"
+  },
+  {
+    "id": "extract_005",
+    "task": "打开本地商品列表页面，分析哪个商品价格最低",
+    "expected_keywords": ["蓝牙键盘"],
+    "type": "extract"
+  },
+  {
+    "id": "extract_006",
+    "task": "打开本地商品列表页面，返回价格最低的商品名称和价格",
+    "expected_keywords": ["蓝牙键盘", "199"],
+    "type": "extract"
+  }
+]
