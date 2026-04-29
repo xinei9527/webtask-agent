@@ -1,22 +1,108 @@
-# WebTask Agent
+# WebTask Agent：浏览器任务自动化与执行追踪系统
 
-浏览器任务自动化与执行追踪系统。项目面向网页检索、表单填写、信息抽取等多步骤浏览器任务，将自然语言任务转化为可执行的浏览器动作，并完整记录 Agent 的观察、决策、工具调用、失败恢复和最终结果。
+我做这个项目的初衷不是简单封装几个 Playwright 脚本，而是想把“浏览器 Agent 到底是怎么思考、怎么行动、怎么失败、又怎么复盘的”这件事做得清楚一点。
 
-该项目强调两个目标：
+很多浏览器自动化 Demo 只能展示最后成功了没有，但中间每一步为什么点这里、为什么输入这里、失败时发生了什么，往往看不见。WebTask Agent 更关注这条执行链路本身：用户输入一句自然语言任务后，系统会观察页面、规划动作、调用浏览器工具、校验结果，并把每一步完整写进 Trace。
 
-- 可执行：通过 Playwright 控制真实浏览器，支持稳定的本地演示和可扩展的通用网页任务。
-- 可观测：通过 Trace 记录每个节点的输入、输出、耗时、截图、错误和 AI 判断，便于复盘 Agent 的行为链路。
+例如输入：
 
-## 核心能力
+```text
+打开本地搜索页面，搜索 Spring AI 工具调用，提取前三条结果标题和链接
+```
 
-- 自然语言任务输入：用户输入一句浏览器任务描述即可启动执行流程。
-- 页面结构化观察：抽取标题、URL、正文摘要、链接、按钮、输入框和可操作元素，避免直接把完整 DOM 交给模型。
-- 受控工具执行：将浏览器能力封装为白名单工具，并通过 Pydantic Schema 校验工具名和参数。
-- LLM-first Planner：配置大模型后，由模型根据页面观察和历史 Trace 选择下一步动作；未配置时使用规则兜底。
-- AI 认知节点：在执行前、中、后分别进行任务分析、动作风险评估、步骤批判、失败反思、结果判定和答案生成。
-- 执行追踪系统：所有节点事件写入 SQLite，支持 Trace 查询、截图回放、失败分类和 Markdown 报告导出。
-- 评测闭环：内置本地测试页面和小规模任务集，统计成功率、平均步骤数、平均耗时和失败类型分布。
-- 可视化演示：通过 Streamlit 展示任务输入、运行结果、AI Workbench、Trace 时间线、截图和统计指标。
+系统会自动打开页面、输入关键词、提交搜索、提取结果，并生成可复盘的执行报告。
+
+## 我在这个项目里重点做了什么
+
+我把整个 Agent 拆成了几个相对清晰的模块，而不是让一个“大模型黑盒”直接控制浏览器：
+
+- 页面观察：只抽取标题、URL、正文摘要、链接、按钮、输入框和可操作元素，而不是把完整 DOM 一股脑塞给模型。
+- 动作规划：支持规则 Planner、LLM Planner 和 Hybrid Planner，既能稳定演示，也能在配置大模型后处理更泛化的网页任务。
+- 工具执行：把浏览器操作封装成白名单工具，例如打开网页、点击、输入、提取文本、提取链接、截图等。
+- 动作校验：每次工具调用前后都会经过动作风险评估、步骤批判和结果校验。
+- 执行追踪：所有观察、决策、动作、截图、耗时、异常和 AI 判断都会写入 SQLite。
+- 评测闭环：内置本地搜索、表单、商品列表页面和任务集，用成功率、步骤数、耗时、失败类型来评估效果。
+
+## 项目亮点
+
+### 1. 不是“脚本式自动化”，而是可追踪的 Agent 流程
+
+我没有把任务写死成固定脚本，而是用 LangGraph 把流程拆成了：
+
+```text
+Task Blueprint
+  -> Observer
+  -> Planner
+  -> Action Policy
+  -> Executor
+  -> Step Critic
+  -> Verifier
+  -> Result Judgement
+  -> Answer Synthesis
+```
+
+这样做的好处是每个节点都有明确职责，也都能被 Trace 记录。后续如果某一步失败，可以直接看到是页面观察不够、Planner 决策不准、元素定位失败，还是最终结果不满足任务要求。
+
+### 2. 页面观察做了结构化抽取
+
+浏览器页面的 DOM 通常非常长，直接丢给模型会带来大量噪声，也会浪费上下文。我这里选择先做一层轻量观察：
+
+```text
+title
+url
+body_text
+links
+buttons
+inputs
+actionable_elements
+```
+
+这样 Planner 拿到的是“页面当前能做什么”的摘要，而不是一整页杂乱 HTML。这个设计让模型更容易选择稳定的 selector、文本、label 或 placeholder，也方便在 Trace 里复盘当前页面状态。
+
+### 3. 工具调用是受控的
+
+我没有让模型自由生成任意代码，而是限制它只能选择系统提供的浏览器工具：
+
+```text
+open_url / click / click_by_text / type_text / type_by_selector / type_by_label
+select_option / hover / press / wait / wait_for_text / scroll / go_back
+extract_text / extract_links / extract_table / current_page / screenshot / finish
+```
+
+所有动作都会经过 `AgentAction` Schema 校验。工具名不合法、参数缺失、参数格式不对，都会在真正执行前被拦住。这样能减少大模型幻觉工具和错误参数带来的执行风险。
+
+### 4. 我给 Agent 加了一层“自我复盘”
+
+为了让项目更像一个 AI Agent，而不是普通自动化工具，我加了一个独立的 AI Intelligence Layer：
+
+| 模块 | 作用 |
+| --- | --- |
+| Task Blueprint | 分析任务类型、目标、成功标准、建议步骤和风险点 |
+| Action Policy Check | 执行前评估动作置信度、风险等级和预期效果 |
+| Step Critic | 执行后判断这一步是否真的推动任务完成 |
+| Failure Reflection | 失败后分类原因，并给出恢复策略 |
+| Result Judgement | 判断最终结果是否满足用户目标 |
+| Answer Synthesizer | 基于 Trace 证据生成最终回答 |
+
+如果配置了 `OPENAI_API_KEY`，这些模块会走大模型；如果没有配置，也会使用启发式策略兜底，保证本地演示不依赖外部服务。
+
+### 5. Trace 是项目的核心，不是附属日志
+
+我希望这个系统不仅能“跑完任务”，还能说清楚“它是怎么跑的”。所以每一步都会记录：
+
+```text
+step_index
+node_name
+action_type
+action_input
+observation
+screenshot_path
+success
+error_message
+cost_ms
+```
+
+最终报告会进一步统计工具调用分布、节点分布、失败类型、截图数量、AI 判定结果和 Agent Depth Score。这个 Trace 机制也是这个项目在简历里最容易讲清楚的地方。
 
 ## 系统架构
 
@@ -44,38 +130,25 @@ flowchart TD
     J --> T
 ```
 
-## Agent 工作流
+## 当前支持的任务
+
+第一版我没有追求“任何网页都能百分百操作”，而是先把 MVP 做稳，主要覆盖三类任务：
 
 ```text
-自然语言任务
-  -> 任务分析 Task Blueprint
-  -> 页面观察 Observer
-  -> 动作选择 Planner
-  -> 动作策略评估 Action Policy
-  -> 浏览器工具执行 Executor
-  -> 步骤批判 Step Critic
-  -> 状态校验 Verifier
-  -> 失败反思 / 重试
-  -> 结果判定 Result Judgement
-  -> 答案生成 Answer Synthesis
-  -> Trace 报告输出
+网页检索
+表单填写
+信息抽取
 ```
 
-## AI Intelligence Layer
+本地内置了三个稳定演示页面：
 
-项目不仅封装浏览器操作，还显式拆分了 Agent 的认知过程：
+```text
+static/pages/search.html
+static/pages/form.html
+static/pages/products.html
+```
 
-| 模块 | 作用 |
-| --- | --- |
-| Task Blueprint | 分析任务类型、目标、成功标准、建议步骤和风险点 |
-| LLM Planner | 基于页面观察、历史动作和恢复建议选择下一步工具 |
-| Action Policy Check | 在执行前评估动作置信度、风险等级和预期效果 |
-| Step Critic | 在执行后判断当前步骤是否推动任务完成 |
-| Failure Reflection | 对定位失败、超时、结果缺失等问题分类并给出恢复策略 |
-| Result Judgement | 判断最终结果是否满足用户目标，并给出置信度和缺失项 |
-| Answer Synthesizer | 基于 Trace 证据生成面向用户的最终回答 |
-
-没有配置大模型时，上述模块会使用启发式逻辑兜底，保证项目可以离线演示；配置 `OPENAI_API_KEY` 后，`hybrid` 和 `llm` 模式会切换为 OpenAI 兼容模型驱动。
+这样做是为了避免演示完全依赖真实网站结构。真实网站可以变，本地评测页面要稳定，这样才能持续验证 Agent 的核心链路。
 
 ## 技术栈
 
@@ -90,8 +163,8 @@ app/
   agent/
     actions.py        # 工具动作 Schema 与参数校验
     graph.py          # LangGraph Agent 编排
-    intelligence.py   # AI 认知层：分析、评估、批判、判定、生成
-    planner.py        # 规则 Planner / LLM Planner / Hybrid Planner
+    intelligence.py   # AI 认知层
+    planner.py        # Rule / LLM / Hybrid Planner
     verifier.py       # 执行状态校验
   browser/
     observer.py       # 页面结构化观察
@@ -107,80 +180,8 @@ app/
     recorder.py       # Trace 写入
     analyzer.py       # Trace 分析与报告
 frontend/
-  streamlit_app.py    # 演示控制台
-static/pages/         # 本地稳定演示页面
-```
-
-## 浏览器工具
-
-当前支持的受控工具集：
-
-```text
-open_url / click / click_by_text / type_text / type_by_selector / type_by_label
-select_option / hover / press / wait / wait_for_text / scroll / go_back
-extract_text / extract_links / extract_table / current_page / screenshot / finish
-```
-
-所有工具调用都会记录：
-
-```text
-tool name
-arguments
-output
-screenshot path
-success flag
-error message
-cost_ms
-```
-
-## Trace 数据模型
-
-核心表包括任务运行表和 Agent Trace 表：
-
-```text
-task_run
-  id
-  user_task
-  status
-  final_result
-  error_message
-  start_time
-  end_time
-
-agent_trace
-  id
-  task_id
-  step_index
-  node_name
-  action_type
-  action_input
-  observation
-  screenshot_path
-  success
-  error_message
-  cost_ms
-  create_time
-```
-
-Trace 报告会汇总：
-
-```text
-执行状态
-最终结果
-执行步骤数
-Trace 事件数
-工具调用分布
-节点调用分布
-失败类型分布
-截图数量
-AI 任务分析
-AI 动作策略评估
-AI 步骤批判
-AI 失败反思
-AI 结果判定
-AI 答案生成
-Agent Depth Score
-Markdown 报告
+  streamlit_app.py    # Streamlit 演示页面
+static/pages/         # 本地测试页面
 ```
 
 ## 快速开始
@@ -216,33 +217,33 @@ OPENAI_API_KEY=<your-openai-api-key>
 OPENAI_MODEL=gpt-4o-mini
 ```
 
-如需接入 OpenAI 兼容服务：
+如果使用 OpenAI 兼容服务，可以额外配置：
 
 ```text
 OPENAI_BASE_URL=<openai-compatible-base-url>
 ```
 
-接口只返回大模型是否已配置，不会返回密钥内容。
+配置接口只会返回是否已配置大模型，不会返回密钥明文。
 
-### 3. 启动 API
+### 3. 启动 FastAPI
 
 ```bash
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-API 文档：
+接口文档：
 
 ```text
 http://localhost:8000/docs
 ```
 
-### 4. 启动演示页面
+### 4. 启动 Streamlit
 
 ```bash
 streamlit run frontend/streamlit_app.py
 ```
 
-访问：
+演示页面：
 
 ```text
 http://localhost:8501
@@ -268,7 +269,7 @@ curl -X POST http://localhost:8000/api/tasks/run ^
   -d "{\"task\":\"打开本地搜索页面，搜索 Spring AI 工具调用，提取前三条结果标题和链接\",\"planner_mode\":\"hybrid\"}"
 ```
 
-## 演示任务
+## 可以直接演示的任务
 
 ```text
 打开本地搜索页面，搜索 Spring AI 工具调用，提取前三条结果标题和链接
@@ -279,12 +280,12 @@ curl -X POST http://localhost:8000/api/tasks/run ^
 ## Planner 模式
 
 ```text
-rule   : 规则 Planner，适合稳定演示和评测
-llm    : 仅使用大模型 Planner，需要配置 OPENAI_API_KEY
+rule   : 只使用规则 Planner，适合稳定演示和评测
+llm    : 只使用大模型 Planner，需要配置 OPENAI_API_KEY
 hybrid : 默认模式，优先使用大模型，不可用时自动回退到规则 Planner
 ```
 
-Planner 输出必须满足统一 JSON 动作格式：
+Planner 输出统一为 JSON 动作：
 
 ```json
 {
@@ -305,7 +306,7 @@ Planner 输出必须满足统一 JSON 动作格式：
 python -m app.eval.runner --api-base http://localhost:8000
 ```
 
-评测指标：
+评测指标包括：
 
 ```text
 任务成功率
@@ -326,18 +327,15 @@ docker run --rm -p 8000:8000 webtask-agent
 
 ## 安全与可控性设计
 
-- 工具白名单：模型只能选择系统定义的浏览器工具。
-- 参数 Schema 校验：非法工具名、缺失参数、错误参数会被拦截。
-- 最大步数限制：避免 Agent 无限循环。
-- 失败重试：工具执行失败后会重试，并在连续失败后终止。
-- 失败反思：失败信息写入 Trace，辅助定位页面变化、元素定位失败和超时问题。
+- 工具白名单：模型不能调用未定义工具。
+- 参数校验：所有动作执行前必须通过 Pydantic Schema。
+- 最大步数限制：避免 Agent 陷入无限循环。
+- 失败重试：工具执行失败后会重试，连续失败后终止任务。
+- 失败反思：失败原因会写入 Trace，便于定位和恢复。
 - 密钥隔离：`.env` 不提交到仓库，配置接口不返回密钥明文。
 
-## 项目亮点
+## 我对这个项目的定位
 
-- 基于 LangGraph 将浏览器 Agent 拆分为可追踪节点，形成清晰的 Agent 执行链路。
-- 使用结构化页面观察替代完整 DOM 输入，降低上下文噪声并提升 Planner 决策稳定性。
-- 引入 Action Policy 和 Step Critic，使系统能够解释“为什么执行这一步”和“这一步是否有效”。
-- 设计 Agent Trace 机制，沉淀动作、观察、截图、耗时、错误、AI 判断和最终报告。
-- 支持 LLM 驱动与规则兜底两种模式，兼顾通用能力和本地演示稳定性。
-- 构建评测闭环，从成功率、执行步数、耗时、失败分布和 AI 置信度评估 Agent 效果。
+这个项目不是为了证明“浏览器 Agent 已经能处理所有网页”，而是为了把一个 Agent 从任务输入到动作执行、从失败恢复到结果评估的完整工程链路做出来。
+
+它适合作为一个可演示、可复盘、可扩展的 AI Agent 项目：既能展示 Playwright 自动化能力，也能展示 LangGraph 编排、工具调用约束、Trace 可观测性、失败分析和评测闭环。
